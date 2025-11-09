@@ -120,41 +120,121 @@ HTML_TEMPLATE = """<!-- Rendered via md-embed-api — https://github.com/Awerito
 <link id="ghcss" rel="stylesheet" href="{gh_light}">
 <link id="pygcss" rel="stylesheet" href="{pyg_light}">
 <style>
-:root {{ color-scheme: light dark; }}
-* {{ box-sizing: border-box; }}
-@media (prefers-color-scheme: dark) {{
-  #ghcss {{ content: url({gh_dark}); }}
-  #pygcss {{ content: url({pyg_dark}); }}
-}}
-body {{ margin:0; padding:0; background:transparent; font-synthesis-weight:none; }}
-.container {{ max-width:{max_width}px; margin:0 auto; padding:{padding}; }}
-.chrome {{ border:1px solid var(--gh-border); border-radius:12px; overflow:hidden; background:var(--gh-bg); box-shadow:0 1px 0 rgba(27,31,36,0.04); }}
-.header {{ display:flex; align-items:center; gap:.5rem; padding:.6rem .9rem; border-bottom:1px solid var(--gh-border); background:var(--gh-subtle); font:600 14px ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,"Helvetica Neue","Noto Sans",sans-serif; color:var(--gh-fg); }}
-.header .meta {{ margin-left:auto; opacity:.75; font-weight:500; font-size:12px; }}
-.footer {{ display:flex; justify-content:flex-end; gap:1rem; padding:.6rem .9rem; border-top:1px solid var(--gh-border); background:var(--gh-subtle); }}
-.footer a {{ font:500 12px ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,"Helvetica Neue","Noto Sans",sans-serif; text-decoration:none; color:var(--gh-link); }}
-.markdown-body {{ padding:1rem 1.1rem; }}
-.markdown-body a {{ color:var(--gh-link); }}
 :root {{
-  --gh-bg:#fff;
-  --gh-subtle:#f6f8fa;
-  --gh-border:#d0d7de;
-  --gh-fg:#24292f;
-  --gh-link:#0969da;
+  color-scheme: light dark;
+  --gh-bg-light:#ffffff;
+  --gh-bg-dark:#0d1117;
+  --gh-fg-light:#24292f;
+  --gh-fg-dark:#c9d1d9;
+  --gh-border-light:#d0d7de;
+  --gh-border-dark:#30363d;
+  --gh-header-light:#f6f8fa;
+  --gh-header-dark:#161b22;
+  --gh-shadow-light:0 1px 3px rgba(27,31,36,0.12);
+  --gh-shadow-dark:0 1px 3px rgba(0,0,0,0.4);
+  --gh-link-light:#0969da;
+  --gh-link-dark:#2f81f7;
 }}
+
+body {{
+  margin:0;
+  background:transparent;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
+}}
+
+.container {{
+  box-sizing:border-box;
+  max-width:{max_width}px;
+  margin:0 auto;
+  padding:{padding};
+}}
+
+.gist-frame {{
+  border-radius:6px;
+  border:1px solid var(--gh-border-light);
+  background:var(--gh-bg-light);
+  box-shadow:var(--gh-shadow-light);
+  overflow:hidden;
+}}
+
 @media (prefers-color-scheme: dark) {{
-  :root {{
-    --gh-bg:#0d1117;
-    --gh-subtle:#161b22;
-    --gh-border:#30363d;
-    --gh-fg:#c9d1d9;
-    --gh-link:#2f81f7;
+  .gist-frame {{
+    border-color:var(--gh-border-dark);
+    background:var(--gh-bg-dark);
+    box-shadow:var(--gh-shadow-dark);
+  }}
+}}
+
+.header {{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  background:var(--gh-header-light);
+  border-bottom:1px solid var(--gh-border-light);
+  padding:8px 12px;
+  font-size:13px;
+  font-weight:600;
+  color:var(--gh-fg-light);
+}}
+
+@media (prefers-color-scheme: dark) {{
+  .header {{
+    background:var(--gh-header-dark);
+    border-color:var(--gh-border-dark);
+    color:var(--gh-fg-dark);
+  }}
+}}
+
+.header .meta {{
+  font-weight:500;
+  opacity:0.7;
+  font-size:12px;
+}}
+
+.markdown-body {{
+  padding:16px;
+  font-size:15px;
+  line-height:1.6;
+}}
+
+.markdown-body a {{
+  color:var(--gh-link-light);
+}}
+
+@media (prefers-color-scheme: dark) {{
+  .markdown-body a {{
+    color:var(--gh-link-dark);
+  }}
+}}
+
+.footer {{
+  border-top:1px solid var(--gh-border-light);
+  background:var(--gh-header-light);
+  padding:6px 12px;
+  display:flex;
+  justify-content:flex-end;
+}}
+
+.footer a {{
+  color:var(--gh-link-light);
+  font-size:12px;
+  text-decoration:none;
+}}
+
+@media (prefers-color-scheme: dark) {{
+  .footer {{
+    border-color:var(--gh-border-dark);
+    background:var(--gh-header-dark);
+  }}
+  .footer a {{
+    color:var(--gh-link-dark);
   }}
 }}
 </style>
+
 <body>
 <div class="container">
-  <div class="chrome">
+  <div class="gist-frame">
     <div class="header">
       <div class="title">{title}</div>
       <div class="meta">{repo}@{ref}</div>
