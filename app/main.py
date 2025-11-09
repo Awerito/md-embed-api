@@ -1,11 +1,14 @@
 import os
-import httpx
 import re
+import httpx
 import hashlib
 import bleach
 import markdown
 
-from fastapi import FastAPI, HTTPException, Query, Response
+from urllib.parse import urlparse, quote
+from typing import Optional
+
+from fastapi import FastAPI, HTTPException, Query, Response, Request
 from fastapi.responses import Response, HTMLResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -19,6 +22,7 @@ APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
 RAW_BASE = os.getenv("GITHUB_RAW_BASE", "https://raw.githubusercontent.com")
 CACHE_MAX_AGE = int(os.getenv("CACHE_MAX_AGE", "300"))
 CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",")]
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "https://md-embed.grye.org")
 
 app = FastAPI(title=APP_NAME, version=APP_VERSION)
 
@@ -77,6 +81,10 @@ ALLOWED_ATTRS = {
 }
 
 
+def blob_url(repo: str, path: str, ref: str) -> str:
+    return f"https://github.com/{repo}/blob/{ref}/{path}"
+
+
 def src_url(repo: str, path: str, ref: str) -> str:
     return f"{RAW_BASE}/{repo}/{ref}/{path}"
 
@@ -111,7 +119,6 @@ GITHUB_MARKDOWN_LIGHT = "https://cdn.jsdelivr.net/npm/github-markdown-css@5.7.0/
 GITHUB_MARKDOWN_DARK = "https://cdn.jsdelivr.net/npm/github-markdown-css@5.7.0/github-markdown-dark.min.css"
 PYGMENTS_LIGHT = "https://cdn.jsdelivr.net/npm/pygments-css@0.1.0/default.css"
 PYGMENTS_DARK = "https://cdn.jsdelivr.net/npm/pygments-css@0.1.0/native.css"
-
 GIST_EMBED_CSS = "https://github.githubassets.com/assets/gist-embed-0ac919313390.css"
 
 FRAGMENT_TEMPLATE = """
@@ -146,7 +153,7 @@ FRAGMENT_TEMPLATE = """
     <div class="gist-meta">
       <a href="{raw_url}" style="float:right" class="Link--inTextBlock" target="_blank" rel="noopener">view raw</a>
       <a href="{file_url}" class="Link--inTextBlock">{filename}</a>
-      hosted on <a class="Link--inTextBlock" href="https://md-embed.grye.org" target="_blank" rel="noopener">MD Embed</a> by <a class="Link--inTextBlock" href="https://github.com/Awerito" target="_blank" rel="noopener">@Awerito</a>
+      hosted on <a class="Link--inTextBlock" href="https://md-embed.grye.org/docs" target="_blank" rel="noopener">MD Embed</a> by <a class="Link--inTextBlock" href="https://github.com/Awerito" target="_blank" rel="noopener">@Awerito</a>
     </div>
   </div>
 </div>
@@ -178,45 +185,6 @@ async def md_raw(
     return resp
 
 
-@app.get("/md/html")
-async def md_html(
-    repo: str = Query(..., description="owner/repo"),
-    path: str = Query(..., description="path/to/file.md"),
-    ref: str = Query("main", description="branch|tag|sha"),
-    max_width: int = Query(860, ge=320, le=1920),
-    padding: str = Query("16px"),
-    title: str | None = Query(None),
-) -> Response:
-    if not repo_re.match(repo) or not ref_re.match(ref) or not path_re.match(path):
-        raise HTTPException(400, "invalid parameters")
-    url = src_url(repo, path, ref)
-    async with httpx.AsyncClient(timeout=15) as client:
-        r = await client.get(url, headers={"User-Agent": f"{APP_NAME}/1.0"})
-    if r.status_code != 200:
-        raise HTTPException(r.status_code, "upstream error")
-    md_text = r.text
-    html_body = render_md(md_text)
-    file_title = title or os.path.basename(path)
-    full = HTML_TEMPLATE.format(
-        gist_css=GIST_EMBED_CSS,
-        gh_light=GITHUB_MARKDOWN_LIGHT,
-        gh_dark=GITHUB_MARKDOWN_DARK,
-        pyg_light=PYGMENTS_LIGHT,
-        pyg_dark=PYGMENTS_DARK,
-        content=html_body,
-        max_width=max_width,
-        padding=padding,
-        title=file_title,
-        raw_url=url,
-        file_url=url,
-        filename=file_title,
-    )
-    et = etag_for(md_text.encode("utf-8"))
-    resp = HTMLResponse(content=full)
-    cache_headers(resp, et)
-    return resp
-
-
 @app.get("/md/fragment")
 async def md_fragment(
     repo: str = Query(...),
@@ -234,6 +202,9 @@ async def md_fragment(
     md_text = r.text
     html_body = render_md(md_text)
     file_title = title or os.path.basename(path)
+    url_raw = src_url(repo, path, ref)
+    url_blob = blob_url(repo, path, ref)
+
     frag = FRAGMENT_TEMPLATE.format(
         gist_css=GIST_EMBED_CSS,
         gh_light=GITHUB_MARKDOWN_LIGHT,
@@ -242,8 +213,8 @@ async def md_fragment(
         pyg_dark=PYGMENTS_DARK,
         content=html_body,
         title=file_title,
-        raw_url=url,
-        file_url=url,
+        raw_url=url_raw,
+        file_url=url_blob,
         filename=file_title,
     )
     et = etag_for(md_text.encode("utf-8"))
@@ -259,7 +230,60 @@ async def md_embed_js(
     ref: str = Query("main"),
     title: str | None = Query(None),
 ) -> Response:
-    frag_resp = await md_fragment(repo=repo, path=path, ref=ref, title=title)  # reuse
+    frag_resp = await md_fragment(repo=repo, path=path, ref=ref, title=title)
     frag_html = frag_resp.body.decode("utf-8")
     js = f"document.write({frag_html!r});"
     return Response(content=js, media_type="application/javascript")
+
+
+def parse_github_blob_url(u: str) -> tuple[str, str, str]:
+    p = urlparse(u)
+    if p.netloc not in {"github.com", "www.github.com"}:
+        raise ValueError("unsupported host")
+    parts = [s for s in p.path.split("/") if s]
+    if len(parts) < 5 or parts[2] != "blob":
+        raise ValueError("invalid blob url")
+    owner, repo = parts[0], parts[1]
+    ref = parts[3]
+    relpath = "/".join(parts[4:])
+    return f"{owner}/{repo}", relpath, ref
+
+
+def build_embed_src(
+    request: Request, repo: str, path: str, ref: str, title: Optional[str]
+) -> str:
+    base = (
+        PUBLIC_BASE_URL.rstrip("/")
+        if PUBLIC_BASE_URL
+        else str(request.base_url).rstrip("/")
+    )
+    q = f"repo={quote(repo)}&path={quote(path)}&ref={quote(ref)}"
+    if title:
+        q += f"&title={quote(title)}"
+    return f"{base}/md/embed.js?{q}"
+
+
+@app.get("/md/snippet", response_class=PlainTextResponse)
+async def md_snippet(
+    request: Request,
+    url: str = Query(..., description="GitHub blob URL"),
+    title: Optional[str] = Query(None),
+):
+    try:
+        repo, path, ref = parse_github_blob_url(url)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    if not repo_re.match(repo) or not ref_re.match(ref) or not path_re.match(path):
+        raise HTTPException(400, "invalid url structure")
+
+    base = (
+        PUBLIC_BASE_URL.rstrip("/")
+        if PUBLIC_BASE_URL
+        else str(request.base_url).rstrip("/")
+    )
+    q = f"repo={quote(repo)}&path={quote(path)}&ref={quote(ref)}"
+    if title:
+        q += f"&title={quote(title)}"
+    script_tag = f'<script src="{base}/md/embed.js?{q}"></script>'
+    return PlainTextResponse(content=script_tag)
