@@ -112,138 +112,47 @@ GITHUB_MARKDOWN_DARK = "https://cdn.jsdelivr.net/npm/github-markdown-css@5.7.0/g
 PYGMENTS_LIGHT = "https://cdn.jsdelivr.net/npm/pygments-css@0.1.0/default.css"
 PYGMENTS_DARK = "https://cdn.jsdelivr.net/npm/pygments-css@0.1.0/native.css"
 
+GIST_EMBED_CSS = "https://github.githubassets.com/assets/gist-embed-0ac919313390.css"
+
 HTML_TEMPLATE = """<!-- Rendered via md-embed-api — https://github.com/Awerito/md-embed-api -->
 <!doctype html>
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="{gist_css}">
 <link id="ghcss" rel="stylesheet" href="{gh_light}">
 <link id="pygcss" rel="stylesheet" href="{pyg_light}">
 <style>
-:root {{
-  color-scheme: light dark;
-  --gh-bg-light:#ffffff;
-  --gh-bg-dark:#0d1117;
-  --gh-fg-light:#24292f;
-  --gh-fg-dark:#c9d1d9;
-  --gh-border-light:#d0d7de;
-  --gh-border-dark:#30363d;
-  --gh-header-light:#f6f8fa;
-  --gh-header-dark:#161b22;
-  --gh-shadow-light:0 1px 3px rgba(27,31,36,0.12);
-  --gh-shadow-dark:0 1px 3px rgba(0,0,0,0.4);
-  --gh-link-light:#0969da;
-  --gh-link-dark:#2f81f7;
-}}
-
-body {{
-  margin:0;
-  background:transparent;
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
-}}
-
-.container {{
-  box-sizing:border-box;
-  max-width:{max_width}px;
-  margin:0 auto;
-  padding:{padding};
-}}
-
-.gist-frame {{
-  border-radius:6px;
-  border:1px solid var(--gh-border-light);
-  background:var(--gh-bg-light);
-  box-shadow:var(--gh-shadow-light);
-  overflow:hidden;
-}}
-
-@media (prefers-color-scheme: dark) {{
-  .gist-frame {{
-    border-color:var(--gh-border-dark);
-    background:var(--gh-bg-dark);
-    box-shadow:var(--gh-shadow-dark);
-  }}
-}}
-
-.header {{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  background:var(--gh-header-light);
-  border-bottom:1px solid var(--gh-border-light);
-  padding:8px 12px;
-  font-size:13px;
-  font-weight:600;
-  color:var(--gh-fg-light);
-}}
-
-@media (prefers-color-scheme: dark) {{
-  .header {{
-    background:var(--gh-header-dark);
-    border-color:var(--gh-border-dark);
-    color:var(--gh-fg-dark);
-  }}
-}}
-
-.header .meta {{
-  font-weight:500;
-  opacity:0.7;
-  font-size:12px;
-}}
-
-.markdown-body {{
-  padding:16px;
-  font-size:15px;
-  line-height:1.6;
-}}
-
-.markdown-body a {{
-  color:var(--gh-link-light);
-}}
-
-@media (prefers-color-scheme: dark) {{
-  .markdown-body a {{
-    color:var(--gh-link-dark);
-  }}
-}}
-
-.footer {{
-  border-top:1px solid var(--gh-border-light);
-  background:var(--gh-header-light);
-  padding:6px 12px;
-  display:flex;
-  justify-content:flex-end;
-}}
-
-.footer a {{
-  color:var(--gh-link-light);
-  font-size:12px;
-  text-decoration:none;
-}}
-
-@media (prefers-color-scheme: dark) {{
-  .footer {{
-    border-color:var(--gh-border-dark);
-    background:var(--gh-header-dark);
-  }}
-  .footer a {{
-    color:var(--gh-link-dark);
-  }}
-}}
+:root { color-scheme: light dark; }
+@media (prefers-color-scheme: dark) {
+  #ghcss { content: url({gh_dark}); }
+  #pygcss { content: url({pyg_dark}); }
+}
+body { margin:0; background:transparent; }
+.container { max-width:{max_width}px; margin:0 auto; padding:{padding}; box-sizing:border-box; }
+.markdown-body { padding:16px; }
+.gist .gist-meta a { text-decoration:none; }
 </style>
-
 <body>
 <div class="container">
-  <div class="gist-frame">
-    <div class="header">
-      <div class="title">{title}</div>
-      <div class="meta">{repo}@{ref}</div>
-    </div>
-    <article class="markdown-body">
-      {content}
-    </article>
-    <div class="footer">
-      <a href="{raw_url}" target="_blank" rel="noopener">view raw</a>
+  <div class="gist">
+    <div class="gist-file" translate="no" data-color-mode="light" data-light-theme="light">
+      <div class="gist-data">
+        <div class="js-gist-file-update-container js-task-list-container">
+          <div class="file my-2">
+            <div class="Box-body readme blob p-5 p-xl-6" style="overflow:auto" tabindex="0" role="region" aria-label="{title}">
+              <article class="markdown-body entry-content container-lg" itemprop="text">
+                {content}
+              </article>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="gist-meta">
+        <a href="{raw_url}" style="float:right" class="Link--inTextBlock" target="_blank" rel="noopener">view raw</a>
+        <a href="{file_url}" class="Link--inTextBlock">{filename}</a>
+        hosted with &#10084; by <a class="Link--inTextBlock" href="https://github.com" target="_blank" rel="noopener">GitHub</a>
+      </div>
     </div>
   </div>
 </div>
@@ -296,9 +205,9 @@ async def md_html(
         raise HTTPException(r.status_code, "upstream error")
     md_text = r.text
     html_body = render_md(md_text)
-    raw_url = url
     file_title = title or os.path.basename(path)
     full = HTML_TEMPLATE.format(
+        gist_css=GIST_EMBED_CSS,
         gh_light=GITHUB_MARKDOWN_LIGHT,
         gh_dark=GITHUB_MARKDOWN_DARK,
         pyg_light=PYGMENTS_LIGHT,
@@ -307,9 +216,9 @@ async def md_html(
         max_width=max_width,
         padding=padding,
         title=file_title,
-        repo=repo,
-        ref=ref,
-        raw_url=raw_url,
+        raw_url=url,
+        file_url=url,
+        filename=file_title,
     )
     et = etag_for(md_text.encode("utf-8"))
     resp = HTMLResponse(content=full)
