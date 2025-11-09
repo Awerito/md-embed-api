@@ -123,15 +123,15 @@ HTML_TEMPLATE = """<!-- Rendered via md-embed-api — https://github.com/Awerito
 <link id="ghcss" rel="stylesheet" href="{gh_light}">
 <link id="pygcss" rel="stylesheet" href="{pyg_light}">
 <style>
-:root { color-scheme: light dark; }
-@media (prefers-color-scheme: dark) {
-  #ghcss { content: url({gh_dark}); }
-  #pygcss { content: url({pyg_dark}); }
-}
-body { margin:0; background:transparent; }
-.container { max-width:{max_width}px; margin:0 auto; padding:{padding}; box-sizing:border-box; }
-.markdown-body { padding:16px; }
-.gist .gist-meta a { text-decoration:none; }
+:root {{ color-scheme: light dark; }}
+@media (prefers-color-scheme: dark) {{
+  #ghcss {{ content: url({gh_dark}); }}
+  #pygcss {{ content: url({pyg_dark}); }}
+}}
+body {{ margin:0; background:transparent; }}
+.container {{ max-width:{max_width}px; margin:0 auto; padding:{padding}; box-sizing:border-box; }}
+.markdown-body {{ padding:16px; }}
+.gist .gist-meta a {{ text-decoration:none; }}
 </style>
 <body>
 <div class="container">
