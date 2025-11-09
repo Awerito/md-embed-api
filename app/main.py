@@ -5,7 +5,7 @@ import hashlib
 import bleach
 import markdown
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.responses import Response, HTMLResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -114,11 +114,7 @@ PYGMENTS_DARK = "https://cdn.jsdelivr.net/npm/pygments-css@0.1.0/native.css"
 
 GIST_EMBED_CSS = "https://github.githubassets.com/assets/gist-embed-0ac919313390.css"
 
-HTML_TEMPLATE = """<!-- Rendered via md-embed-api — https://github.com/Awerito/md-embed-api -->
-<!doctype html>
-<html lang="en">
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+FRAGMENT_TEMPLATE = """
 <link rel="stylesheet" href="{gist_css}">
 <link id="ghcss" rel="stylesheet" href="{gh_light}">
 <link id="pygcss" rel="stylesheet" href="{pyg_light}">
@@ -128,37 +124,32 @@ HTML_TEMPLATE = """<!-- Rendered via md-embed-api — https://github.com/Awerito
   #ghcss {{ content: url({gh_dark}); }}
   #pygcss {{ content: url({pyg_dark}); }}
 }}
-body {{ margin:0; background:transparent; }}
-.container {{ max-width:{max_width}px; margin:0 auto; padding:{padding}; box-sizing:border-box; }}
+.gist-file {{ border:1px solid #d0d7de !important; border-radius:6px !important; background:#fff !important; overflow:hidden !important; }}
+@media (prefers-color-scheme: dark) {{
+  .gist-file {{ border:1px solid #30363d !important; background:#0d1117 !important; }}
+}}
 .markdown-body {{ padding:16px; }}
-.gist .gist-meta a {{ text-decoration:none; }}
 </style>
-<body>
-<div class="container">
-  <div class="gist">
-    <div class="gist-file" translate="no" data-color-mode="light" data-light-theme="light">
-      <div class="gist-data">
-        <div class="js-gist-file-update-container js-task-list-container">
-          <div class="file my-2">
-            <div class="Box-body readme blob p-5 p-xl-6" style="overflow:auto" tabindex="0" role="region" aria-label="{title}">
-              <article class="markdown-body entry-content container-lg" itemprop="text">
-                {content}
-              </article>
-            </div>
+<div class="gist">
+  <div class="gist-file" translate="no" data-color-mode="light" data-light-theme="light">
+    <div class="gist-data">
+      <div class="js-gist-file-update-container js-task-list-container">
+        <div class="file my-2">
+          <div class="Box-body readme blob p-5 p-xl-6" style="overflow:auto" tabindex="0" role="region" aria-label="{title}">
+            <article class="markdown-body entry-content container-lg" itemprop="text">
+              {content}
+            </article>
           </div>
         </div>
       </div>
-      <div class="gist-meta">
-        <a href="{raw_url}" style="float:right" class="Link--inTextBlock" target="_blank" rel="noopener">view raw</a>
-        <a href="{file_url}" class="Link--inTextBlock">{filename}</a>
-        hosted with &#10084; by <a class="Link--inTextBlock" href="https://github.com" target="_blank" rel="noopener">GitHub</a>
-      </div>
+    </div>
+    <div class="gist-meta">
+      <a href="{raw_url}" style="float:right" class="Link--inTextBlock" target="_blank" rel="noopener">view raw</a>
+      <a href="{file_url}" class="Link--inTextBlock">{filename}</a>
+      hosted with &#10084; by <a class="Link--inTextBlock" href="https://github.com" target="_blank" rel="noopener">GitHub</a>
     </div>
   </div>
 </div>
-</body>
-</html>
-<!-- End of md-embed-api render — https://github.com/Awerito/md-embed-api -->
 """
 
 
@@ -224,3 +215,51 @@ async def md_html(
     resp = HTMLResponse(content=full)
     cache_headers(resp, et)
     return resp
+
+
+@app.get("/md/fragment")
+async def md_fragment(
+    repo: str = Query(...),
+    path: str = Query(...),
+    ref: str = Query("main"),
+    title: str | None = Query(None),
+) -> Response:
+    if not repo_re.match(repo) or not ref_re.match(ref) or not path_re.match(path):
+        raise HTTPException(400, "invalid parameters")
+    url = src_url(repo, path, ref)
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(url, headers={"User-Agent": f"{APP_NAME}/1.0"})
+    if r.status_code != 200:
+        raise HTTPException(r.status_code, "upstream error")
+    md_text = r.text
+    html_body = render_md(md_text)
+    file_title = title or os.path.basename(path)
+    frag = FRAGMENT_TEMPLATE.format(
+        gist_css=GIST_EMBED_CSS,
+        gh_light=GITHUB_MARKDOWN_LIGHT,
+        gh_dark=GITHUB_MARKDOWN_DARK,
+        pyg_light=PYGMENTS_LIGHT,
+        pyg_dark=PYGMENTS_DARK,
+        content=html_body,
+        title=file_title,
+        raw_url=url,
+        file_url=url,
+        filename=file_title,
+    )
+    et = etag_for(md_text.encode("utf-8"))
+    resp = HTMLResponse(content=frag)
+    cache_headers(resp, et)
+    return resp
+
+
+@app.get("/md/embed.js")
+async def md_embed_js(
+    repo: str = Query(...),
+    path: str = Query(...),
+    ref: str = Query("main"),
+    title: str | None = Query(None),
+) -> Response:
+    frag_resp = await md_fragment(repo=repo, path=path, ref=ref, title=title)  # reuse
+    frag_html = frag_resp.body.decode("utf-8")
+    js = f"document.write({frag_html!r});"
+    return Response(content=js, media_type="application/javascript")
