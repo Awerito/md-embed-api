@@ -146,7 +146,7 @@ FRAGMENT_TEMPLATE = """
     <div class="gist-meta">
       <a href="{raw_url}" style="float:right" class="Link--inTextBlock" target="_blank" rel="noopener">view raw</a>
       <a href="{file_url}" class="Link--inTextBlock">{filename}</a>
-      hosted with &#10084; by <a class="Link--inTextBlock" href="https://github.com" target="_blank" rel="noopener">GitHub</a>
+      hosted on <a class="Link--inTextBlock" href="https://md-embed.grye.org" target="_blank" rel="noopener">MD Embed</a> by <a class="Link--inTextBlock" href="https://github.com/Awerito" target="_blank" rel="noopener">@Awerito</a>
     </div>
   </div>
 </div>
