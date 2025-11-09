@@ -113,6 +113,7 @@ PYGMENTS_LIGHT = "https://cdn.jsdelivr.net/npm/pygments-css@0.1.0/default.css"
 PYGMENTS_DARK = "https://cdn.jsdelivr.net/npm/pygments-css@0.1.0/native.css"
 
 HTML_TEMPLATE = """<!-- Rendered via md-embed-api — https://github.com/Awerito/md-embed-api -->
+<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -120,20 +121,51 @@ HTML_TEMPLATE = """<!-- Rendered via md-embed-api — https://github.com/Awerito
 <link id="pygcss" rel="stylesheet" href="{pyg_light}">
 <style>
 :root {{ color-scheme: light dark; }}
+* {{ box-sizing: border-box; }}
 @media (prefers-color-scheme: dark) {{
   #ghcss {{ content: url({gh_dark}); }}
   #pygcss {{ content: url({pyg_dark}); }}
 }}
-body {{ margin:0; padding:0; background:transparent; }}
-.article {{ padding: 0; }}
-.container {{ box-sizing:border-box; max-width:{max_width}px; margin:0 auto; padding:{padding}; }}
-.markdown-body pre {{ overflow:auto; }}
+body {{ margin:0; padding:0; background:transparent; font-synthesis-weight:none; }}
+.container {{ max-width:{max_width}px; margin:0 auto; padding:{padding}; }}
+.chrome {{ border:1px solid var(--gh-border); border-radius:12px; overflow:hidden; background:var(--gh-bg); box-shadow:0 1px 0 rgba(27,31,36,0.04); }}
+.header {{ display:flex; align-items:center; gap:.5rem; padding:.6rem .9rem; border-bottom:1px solid var(--gh-border); background:var(--gh-subtle); font:600 14px ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,"Helvetica Neue","Noto Sans",sans-serif; color:var(--gh-fg); }}
+.header .meta {{ margin-left:auto; opacity:.75; font-weight:500; font-size:12px; }}
+.footer {{ display:flex; justify-content:flex-end; gap:1rem; padding:.6rem .9rem; border-top:1px solid var(--gh-border); background:var(--gh-subtle); }}
+.footer a {{ font:500 12px ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,"Helvetica Neue","Noto Sans",sans-serif; text-decoration:none; color:var(--gh-link); }}
+.markdown-body {{ padding:1rem 1.1rem; }}
+.markdown-body a {{ color:var(--gh-link); }}
+:root {{
+  --gh-bg:#fff;
+  --gh-subtle:#f6f8fa;
+  --gh-border:#d0d7de;
+  --gh-fg:#24292f;
+  --gh-link:#0969da;
+}}
+@media (prefers-color-scheme: dark) {{
+  :root {{
+    --gh-bg:#0d1117;
+    --gh-subtle:#161b22;
+    --gh-border:#30363d;
+    --gh-fg:#c9d1d9;
+    --gh-link:#2f81f7;
+  }}
+}}
 </style>
 <body>
 <div class="container">
-  <article class="markdown-body article">
-  {content}
-  </article>
+  <div class="chrome">
+    <div class="header">
+      <div class="title">{title}</div>
+      <div class="meta">{repo}@{ref}</div>
+    </div>
+    <article class="markdown-body">
+      {content}
+    </article>
+    <div class="footer">
+      <a href="{raw_url}" target="_blank" rel="noopener">view raw</a>
+    </div>
+  </div>
 </div>
 </body>
 </html>
@@ -173,6 +205,7 @@ async def md_html(
     ref: str = Query("main", description="branch|tag|sha"),
     max_width: int = Query(860, ge=320, le=1920),
     padding: str = Query("16px"),
+    title: str | None = Query(None),
 ) -> Response:
     if not repo_re.match(repo) or not ref_re.match(ref) or not path_re.match(path):
         raise HTTPException(400, "invalid parameters")
@@ -183,6 +216,8 @@ async def md_html(
         raise HTTPException(r.status_code, "upstream error")
     md_text = r.text
     html_body = render_md(md_text)
+    raw_url = url
+    file_title = title or os.path.basename(path)
     full = HTML_TEMPLATE.format(
         gh_light=GITHUB_MARKDOWN_LIGHT,
         gh_dark=GITHUB_MARKDOWN_DARK,
@@ -191,6 +226,10 @@ async def md_html(
         content=html_body,
         max_width=max_width,
         padding=padding,
+        title=file_title,
+        repo=repo,
+        ref=ref,
+        raw_url=raw_url,
     )
     et = etag_for(md_text.encode("utf-8"))
     resp = HTMLResponse(content=full)
