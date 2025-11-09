@@ -112,7 +112,7 @@ GITHUB_MARKDOWN_DARK = "https://cdn.jsdelivr.net/npm/github-markdown-css@5.7.0/g
 PYGMENTS_LIGHT = "https://cdn.jsdelivr.net/npm/pygments-css@0.1.0/default.css"
 PYGMENTS_DARK = "https://cdn.jsdelivr.net/npm/pygments-css@0.1.0/native.css"
 
-HTML_TEMPLATE = """<!doctype html>
+HTML_TEMPLATE = """<!-- Rendered via md-embed-api — https://github.com/Awerito/md-embed-api -->
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
