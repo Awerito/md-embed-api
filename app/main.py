@@ -1,24 +1,33 @@
-import re
+import os
 import httpx
-import bleach
+import re
 import hashlib
+import bleach
 import markdown
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, HTMLResponse, PlainTextResponse
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
 
+# load .env
+load_dotenv()
 
-app = FastAPI(title="md-embed-api", version="v1.0.0")
+# config
+APP_NAME = os.getenv("APP_NAME", "md-embed-api")
+APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
+RAW_BASE = os.getenv("GITHUB_RAW_BASE", "https://raw.githubusercontent.com")
+CACHE_MAX_AGE = int(os.getenv("CACHE_MAX_AGE", "300"))
+CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",")]
+
+app = FastAPI(title=APP_NAME, version=APP_VERSION)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS if CORS_ORIGINS != ["*"] else ["*"],
     allow_methods=["GET"],
     allow_headers=["*"],
 )
-
-RAW_BASE = "https://raw.githubusercontent.com"
 
 repo_re = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 ref_re = re.compile(r"^[A-Za-z0-9_.\-\/]+$")
@@ -76,9 +85,9 @@ def etag_for(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
-def cache_headers(resp: Response, etag: str, max_age: int = 300) -> None:
+def cache_headers(resp: Response, etag: str) -> None:
     resp.headers["ETag"] = etag
-    resp.headers["Cache-Control"] = f"public, max-age={max_age}"
+    resp.headers["Cache-Control"] = f"public, max-age={CACHE_MAX_AGE}"
 
 
 def render_md(md_text: str) -> str:
@@ -128,25 +137,26 @@ body {{ margin:0; padding:0; background:transparent; }}
 </div>
 </body>
 </html>
+<!-- End of md-embed-api render — https://github.com/Awerito/md-embed-api -->
 """
 
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "name": app.title, "version": app.version}
+    return {"status": "ok", "name": APP_NAME, "version": APP_VERSION}
 
 
 @app.get("/md/raw")
 async def md_raw(
     repo: str = Query(..., description="owner/repo"),
     path: str = Query(..., description="path/to/file.md"),
-    ref: str = Query("master", description="branch|tag|sha"),
+    ref: str = Query("main", description="branch|tag|sha"),
 ) -> Response:
     if not repo_re.match(repo) or not ref_re.match(ref) or not path_re.match(path):
         raise HTTPException(400, "invalid parameters")
     url = src_url(repo, path, ref)
     async with httpx.AsyncClient(timeout=15) as client:
-        r = await client.get(url, headers={"User-Agent": "md-embed-api/1.0"})
+        r = await client.get(url, headers={"User-Agent": f"{APP_NAME}/1.0"})
     if r.status_code != 200:
         raise HTTPException(r.status_code, "upstream error")
     body = r.content
@@ -160,7 +170,7 @@ async def md_raw(
 async def md_html(
     repo: str = Query(..., description="owner/repo"),
     path: str = Query(..., description="path/to/file.md"),
-    ref: str = Query("master", description="branch|tag|sha"),
+    ref: str = Query("main", description="branch|tag|sha"),
     max_width: int = Query(860, ge=320, le=1920),
     padding: str = Query("16px"),
 ) -> Response:
@@ -168,7 +178,7 @@ async def md_html(
         raise HTTPException(400, "invalid parameters")
     url = src_url(repo, path, ref)
     async with httpx.AsyncClient(timeout=15) as client:
-        r = await client.get(url, headers={"User-Agent": "md-embed-api/1.0"})
+        r = await client.get(url, headers={"User-Agent": f"{APP_NAME}/1.0"})
     if r.status_code != 200:
         raise HTTPException(r.status_code, "upstream error")
     md_text = r.text
