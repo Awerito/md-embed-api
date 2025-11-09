@@ -108,7 +108,6 @@ def render_md(md_text: str) -> str:
             "toc",
             "sane_lists",
             "admonition",
-            "nl2br",
         ],
     )
     safe = bleach.clean(html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, strip=False)
