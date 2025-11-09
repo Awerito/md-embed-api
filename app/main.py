@@ -152,7 +152,7 @@ FRAGMENT_TEMPLATE = """
     </div>
     <div class="gist-meta">
       <a href="{raw_url}" style="float:right" class="Link--inTextBlock" target="_blank" rel="noopener">view raw</a>
-      <a href="{file_url}" class="Link--inTextBlock">{filename}</a>
+      <a href="{file_url}" class="Link--inTextBlock" target="_blank">{filename}</a>
       hosted on <a class="Link--inTextBlock" href="https://md-embed.grye.org/docs" target="_blank" rel="noopener">MD Embed</a> by <a class="Link--inTextBlock" href="https://github.com/Awerito" target="_blank" rel="noopener">@Awerito</a>
     </div>
   </div>
