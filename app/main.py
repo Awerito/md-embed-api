@@ -286,3 +286,17 @@ async def md_snippet(
         q += f"&title={quote(title)}"
     script_tag = f'<script src="{base}/md/embed.js?{q}"></script>'
     return PlainTextResponse(content=script_tag)
+
+
+@app.get("/raw-url")
+def get_raw_url(github_url: str = Query(..., description="GitHub file URL")):
+    if "github.com" not in github_url or "/blob/" not in github_url:
+        return HTTPException(
+            status_code=400,
+            detail="Invalid GitHub URL. Must be a GitHub file URL containing '/blob/'.",
+        )
+
+    raw_url = github_url.replace("github.com", "raw.githubusercontent.com").replace(
+        "/blob/", "/"
+    )
+    return {"raw_url": raw_url}
