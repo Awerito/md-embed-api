@@ -108,7 +108,11 @@ def render_md(md_text: str) -> str:
             "toc",
             "sane_lists",
             "admonition",
+            "pymdownx.arithmatex",
         ],
+        extension_configs={
+            "pymdownx.arithmatex": {"generic": True},
+        },
     )
     safe = bleach.clean(html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, strip=False)
     return safe
@@ -136,6 +140,13 @@ FRAGMENT_TEMPLATE = """
 }}
 .markdown-body {{ padding:16px; }}
 </style>
+<script>
+window.MathJax = {{
+  tex: {{ inlineMath: [['\\\\(', '\\\\)']], displayMath: [['\\\\[', '\\\\]']] }},
+  options: {{ ignoreHtmlClass: '.*', processHtmlClass: 'arithmatex' }}
+}};
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 <div class="gist">
   <div class="gist-file" translate="no" data-color-mode="light" data-light-theme="light">
     <div class="gist-data">
