@@ -78,6 +78,7 @@ ALLOWED_ATTRS = {
     "span": ["class"],
     "div": ["class"],
     "pre": ["class"],
+    "ol": ["start", "type"],
 }
 
 
