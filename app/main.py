@@ -103,8 +103,8 @@ def render_md(md_text: str) -> str:
     html = markdown.markdown(
         md_text,
         extensions=[
-            "fenced_code",
-            "codehilite",
+            "pymdownx.superfences",
+            "pymdownx.highlight",
             "tables",
             "toc",
             "sane_lists",
@@ -113,6 +113,7 @@ def render_md(md_text: str) -> str:
         ],
         extension_configs={
             "pymdownx.arithmatex": {"generic": True},
+            "pymdownx.highlight": {"css_class": "codehilite", "guess_lang": False},
         },
     )
     safe = bleach.clean(html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, strip=False)
@@ -121,8 +122,8 @@ def render_md(md_text: str) -> str:
 
 GITHUB_MARKDOWN_LIGHT = "https://cdn.jsdelivr.net/npm/github-markdown-css@5.7.0/github-markdown-light.min.css"
 GITHUB_MARKDOWN_DARK = "https://cdn.jsdelivr.net/npm/github-markdown-css@5.7.0/github-markdown-dark.min.css"
-PYGMENTS_LIGHT = "https://cdn.jsdelivr.net/npm/pygments-css@0.1.0/default.css"
-PYGMENTS_DARK = "https://cdn.jsdelivr.net/npm/pygments-css@0.1.0/native.css"
+PYGMENTS_LIGHT = "https://cdn.jsdelivr.net/npm/pygments-css@1.0.0/default.css"
+PYGMENTS_DARK = "https://cdn.jsdelivr.net/npm/pygments-css@1.0.0/native.css"
 GIST_EMBED_CSS = "https://github.githubassets.com/assets/gist-embed-0ac919313390.css"
 
 FRAGMENT_TEMPLATE = """
