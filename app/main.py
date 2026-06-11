@@ -142,19 +142,15 @@ def render_md(
 
 STATIC_BASE = f"{PUBLIC_BASE_URL.rstrip('/')}/static"
 GITHUB_MARKDOWN_LIGHT = f"{STATIC_BASE}/github-markdown-light.css"
-GITHUB_MARKDOWN_DARK = f"{STATIC_BASE}/github-markdown-dark.css"
 PYGMENTS_LIGHT = f"{STATIC_BASE}/pygments-default.css"
-PYGMENTS_DARK = f"{STATIC_BASE}/pygments-native.css"
 GIST_EMBED_CSS = f"{STATIC_BASE}/gist.css"
 
 FRAGMENT_TEMPLATE = """
 <link rel="stylesheet" href="{gist_css}">
-<link rel="stylesheet" href="{gh_light}" media="(prefers-color-scheme: light)">
-<link rel="stylesheet" href="{gh_dark}" media="(prefers-color-scheme: dark)">
-<link rel="stylesheet" href="{pyg_light}" media="(prefers-color-scheme: light)">
-<link rel="stylesheet" href="{pyg_dark}" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" href="{gh_light}">
+<link rel="stylesheet" href="{pyg_light}">
 <style>
-:root {{ color-scheme: light dark; }}
+:root {{ color-scheme: light; }}
 </style>
 <script>
 window.MathJax = {{
@@ -192,9 +188,7 @@ def build_fragment(
     return FRAGMENT_TEMPLATE.format(
         gist_css=GIST_EMBED_CSS,
         gh_light=GITHUB_MARKDOWN_LIGHT,
-        gh_dark=GITHUB_MARKDOWN_DARK,
         pyg_light=PYGMENTS_LIGHT,
-        pyg_dark=PYGMENTS_DARK,
         content=html_body,
         title=title,
         raw_url=raw_url,
