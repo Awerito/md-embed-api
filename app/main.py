@@ -11,6 +11,8 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Query, Response, Request
 from fastapi.responses import Response, HTMLResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from dotenv import load_dotenv
 
 # load .env
@@ -29,8 +31,14 @@ app = FastAPI(title=APP_NAME, version=APP_VERSION)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS if CORS_ORIGINS != ["*"] else ["*"],
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
+)
+
+app.mount(
+    "/static",
+    StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")),
+    name="static",
 )
 
 repo_re = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -99,48 +107,54 @@ def cache_headers(resp: Response, etag: str) -> None:
     resp.headers["Cache-Control"] = f"public, max-age={CACHE_MAX_AGE}"
 
 
-def render_md(md_text: str) -> str:
+DEFAULT_EXTENSIONS = [
+    "pymdownx.superfences",
+    "pymdownx.highlight",
+    "tables",
+    "toc",
+    "sane_lists",
+    "admonition",
+    "pymdownx.arithmatex",
+]
+DEFAULT_EXTENSION_CONFIGS = {
+    "pymdownx.arithmatex": {"generic": True},
+    "pymdownx.highlight": {"css_class": "codehilite", "guess_lang": False},
+}
+
+
+def render_md(
+    md_text: str,
+    extensions: list[str] | None = None,
+    extension_configs: dict | None = None,
+) -> str:
     html = markdown.markdown(
         md_text,
-        extensions=[
-            "pymdownx.superfences",
-            "pymdownx.highlight",
-            "tables",
-            "toc",
-            "sane_lists",
-            "admonition",
-            "pymdownx.arithmatex",
-        ],
-        extension_configs={
-            "pymdownx.arithmatex": {"generic": True},
-            "pymdownx.highlight": {"css_class": "codehilite", "guess_lang": False},
-        },
+        extensions=DEFAULT_EXTENSIONS if extensions is None else extensions,
+        extension_configs=(
+            DEFAULT_EXTENSION_CONFIGS
+            if extension_configs is None
+            else extension_configs
+        ),
     )
     safe = bleach.clean(html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, strip=False)
     return safe
 
 
-GITHUB_MARKDOWN_LIGHT = "https://cdn.jsdelivr.net/npm/github-markdown-css@5.7.0/github-markdown-light.min.css"
-GITHUB_MARKDOWN_DARK = "https://cdn.jsdelivr.net/npm/github-markdown-css@5.7.0/github-markdown-dark.min.css"
-PYGMENTS_LIGHT = "https://cdn.jsdelivr.net/npm/pygments-css@1.0.0/default.css"
-PYGMENTS_DARK = "https://cdn.jsdelivr.net/npm/pygments-css@1.0.0/native.css"
-GIST_EMBED_CSS = "https://github.githubassets.com/assets/gist-embed-0ac919313390.css"
+STATIC_BASE = f"{PUBLIC_BASE_URL.rstrip('/')}/static"
+GITHUB_MARKDOWN_LIGHT = f"{STATIC_BASE}/github-markdown-light.css"
+GITHUB_MARKDOWN_DARK = f"{STATIC_BASE}/github-markdown-dark.css"
+PYGMENTS_LIGHT = f"{STATIC_BASE}/pygments-default.css"
+PYGMENTS_DARK = f"{STATIC_BASE}/pygments-native.css"
+GIST_EMBED_CSS = f"{STATIC_BASE}/gist.css"
 
 FRAGMENT_TEMPLATE = """
 <link rel="stylesheet" href="{gist_css}">
-<link id="ghcss" rel="stylesheet" href="{gh_light}">
-<link id="pygcss" rel="stylesheet" href="{pyg_light}">
+<link rel="stylesheet" href="{gh_light}" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="{gh_dark}" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" href="{pyg_light}" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="{pyg_dark}" media="(prefers-color-scheme: dark)">
 <style>
 :root {{ color-scheme: light dark; }}
-@media (prefers-color-scheme: dark) {{
-  #ghcss {{ content: url({gh_dark}); }}
-  #pygcss {{ content: url({pyg_dark}); }}
-}}
-.gist-file {{ border:1px solid #d0d7de !important; border-radius:6px !important; background:#fff !important; overflow:hidden !important; }}
-@media (prefers-color-scheme: dark) {{
-  .gist-file {{ border:1px solid #30363d !important; background:#0d1117 !important; }}
-}}
-.markdown-body {{ padding:16px; }}
 </style>
 <script>
 window.MathJax = {{
@@ -172,9 +186,39 @@ window.MathJax = {{
 """
 
 
+def build_fragment(
+    html_body: str, title: str, raw_url: str, file_url: str, filename: str
+) -> str:
+    return FRAGMENT_TEMPLATE.format(
+        gist_css=GIST_EMBED_CSS,
+        gh_light=GITHUB_MARKDOWN_LIGHT,
+        gh_dark=GITHUB_MARKDOWN_DARK,
+        pyg_light=PYGMENTS_LIGHT,
+        pyg_dark=PYGMENTS_DARK,
+        content=html_body,
+        title=title,
+        raw_url=raw_url,
+        file_url=file_url,
+        filename=filename,
+    )
+
+
+class RenderRequest(BaseModel):
+    markdown: str
+    extensions: list[str] | None = None
+    extension_configs: dict | None = None
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "name": APP_NAME, "version": APP_VERSION}
+
+
+@app.post("/md/render")
+def md_render(req: RenderRequest) -> Response:
+    html_body = render_md(req.markdown, req.extensions, req.extension_configs)
+    frag = build_fragment(html_body, "render", "#", "#", "render")
+    return HTMLResponse(content=frag)
 
 
 @app.get("/md/raw")
@@ -217,18 +261,7 @@ async def md_fragment(
     url_raw = src_url(repo, path, ref)
     url_blob = blob_url(repo, path, ref)
 
-    frag = FRAGMENT_TEMPLATE.format(
-        gist_css=GIST_EMBED_CSS,
-        gh_light=GITHUB_MARKDOWN_LIGHT,
-        gh_dark=GITHUB_MARKDOWN_DARK,
-        pyg_light=PYGMENTS_LIGHT,
-        pyg_dark=PYGMENTS_DARK,
-        content=html_body,
-        title=file_title,
-        raw_url=url_raw,
-        file_url=url_blob,
-        filename=file_title,
-    )
+    frag = build_fragment(html_body, file_title, url_raw, url_blob, file_title)
     et = etag_for(md_text.encode("utf-8"))
     resp = HTMLResponse(content=frag)
     cache_headers(resp, et)
