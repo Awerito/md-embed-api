@@ -3,12 +3,20 @@ import re
 import httpx
 import hashlib
 import bleach
-import markdown
+import html as _html
+import cmarkgfm
+
+from functools import lru_cache
+from cmarkgfm.cmark import Options as cmark_opts
+from pygments import highlight
+from pygments.lexers import get_lexer_by_name
+from pygments.util import ClassNotFound
+from pygments.formatters import HtmlFormatter
 
 from urllib.parse import urlparse, quote
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query, Response, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import Response, HTMLResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -72,21 +80,33 @@ ALLOWED_TAGS = bleach.sanitizer.ALLOWED_TAGS.union(
         "li",
         "em",
         "strong",
+        "del",
+        "s",
+        "kbd",
+        "sub",
         "a",
         "img",
         "details",
         "summary",
+        "input",
+        "sup",
+        "section",
     }
 )
 ALLOWED_ATTRS = {
     **bleach.sanitizer.ALLOWED_ATTRIBUTES,
-    "a": ["href", "title", "rel", "target"],
+    "a": ["href", "title", "rel", "target", "id"],
     "img": ["src", "alt", "title", "width", "height"],
     "code": ["class"],
     "span": ["class"],
     "div": ["class"],
     "pre": ["class"],
     "ol": ["start", "type"],
+    "ul": ["class"],
+    "li": ["class", "id"],
+    "input": ["type", "checked", "disabled", "class"],
+    "sup": ["id"],
+    "section": ["class"],
 }
 
 
@@ -107,37 +127,38 @@ def cache_headers(resp: Response, etag: str) -> None:
     resp.headers["Cache-Control"] = f"public, max-age={CACHE_MAX_AGE}"
 
 
-DEFAULT_EXTENSIONS = [
-    "pymdownx.superfences",
-    "pymdownx.highlight",
-    "tables",
-    "toc",
-    "sane_lists",
-    "admonition",
-    "pymdownx.arithmatex",
-]
-DEFAULT_EXTENSION_CONFIGS = {
-    "pymdownx.arithmatex": {"generic": True},
-    "pymdownx.highlight": {"css_class": "codehilite", "guess_lang": False},
-}
+CMARK_OPTIONS = (
+    cmark_opts.CMARK_OPT_UNSAFE
+    | cmark_opts.CMARK_OPT_GITHUB_PRE_LANG
+    | cmark_opts.CMARK_OPT_FOOTNOTES
+)
+
+_FORMATTER = HtmlFormatter(cssclass="codehilite")
+_CODE_RE = re.compile(r'<pre lang="([^"]*)"><code>(.*?)</code></pre>', re.DOTALL)
 
 
-def render_md(
-    md_text: str,
-    extensions: list[str] | None = None,
-    extension_configs: dict | None = None,
-) -> str:
-    html = markdown.markdown(
-        md_text,
-        extensions=DEFAULT_EXTENSIONS if extensions is None else extensions,
-        extension_configs=(
-            DEFAULT_EXTENSION_CONFIGS
-            if extension_configs is None
-            else extension_configs
-        ),
-    )
-    safe = bleach.clean(html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, strip=False)
-    return safe
+@lru_cache(maxsize=64)
+def _lexer_for(lang: str):
+    try:
+        return get_lexer_by_name(lang)
+    except ClassNotFound:
+        return None
+
+
+def highlight_code_blocks(html: str) -> str:
+    def repl(m: re.Match) -> str:
+        lexer = _lexer_for(m.group(1))
+        if lexer is None:
+            return m.group(0)
+        return highlight(_html.unescape(m.group(2)), lexer, _FORMATTER)
+
+    return _CODE_RE.sub(repl, html)
+
+
+def render_md(md_text: str) -> str:
+    html = cmarkgfm.github_flavored_markdown_to_html(md_text, CMARK_OPTIONS)
+    html = highlight_code_blocks(html)
+    return bleach.clean(html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, strip=False)
 
 
 STATIC_BASE = f"{PUBLIC_BASE_URL.rstrip('/')}/static"
@@ -154,8 +175,10 @@ FRAGMENT_TEMPLATE = """
 </style>
 <script>
 window.MathJax = {{
-  tex: {{ inlineMath: [['\\\\(', '\\\\)']], displayMath: [['\\\\[', '\\\\]']] }},
-  options: {{ ignoreHtmlClass: '.*', processHtmlClass: 'arithmatex' }}
+  tex: {{
+    inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
+    displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']]
+  }}
 }};
 </script>
 <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
@@ -199,8 +222,6 @@ def build_fragment(
 
 class RenderRequest(BaseModel):
     markdown: str
-    extensions: list[str] | None = None
-    extension_configs: dict | None = None
 
 
 @app.get("/health")
@@ -210,7 +231,7 @@ def health() -> dict:
 
 @app.post("/md/render")
 def md_render(req: RenderRequest) -> Response:
-    html_body = render_md(req.markdown, req.extensions, req.extension_configs)
+    html_body = render_md(req.markdown)
     frag = build_fragment(html_body, "render", "#", "#", "render")
     return HTMLResponse(content=frag)
 
